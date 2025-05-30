@@ -1,0 +1,1181 @@
+---
+title: "Breast cancer classification"
+authors: "Andriani Panagi, Panayiota Damianou, Kypriani Paraskevolpoulou"
+date: "2023-04-19"
+output: html_document
+---
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+
+Install all the necessary packages:
+NOTE:Uncomment if a library is not already installed
+```{r}
+#install.packages("DescTools")
+#install.packages("dplyr")
+#install.packages("tidyr")
+#install.packages("ggplot2")
+#install.packages("caret")
+#install.packages("lattice")
+#install.packages("moments")
+#install.packages("tidyverse")
+#install.packages("writexl")
+#install.packages("sparklyr")
+#install.packages("DataExplorer")
+#install.packages("plyr")
+#install.packages("ISLR2")
+#install.packages("leaps")
+#install.packages("MASS")
+#install.packages("class")
+#install.packages("corrplot")
+#install.packages("randomForest")
+#install.packages("cowplot")
+#install.packages("pls")
+#install.packages('e1071')
+#install.packages("naivebayes")
+#install.packages("rstatix")
+
+```
+
+Load all the necessary packages:
+ΝΟTE: The libraries that are written as a comment, are used in the code below in order to not affect any possible coding and outcome
+```{r}
+# use of the packages
+library(DataExplorer)
+library(DescTools)
+library(tidyr)
+library(ggplot2) 
+library(caret)
+library(lattice)
+library(moments)
+library(tidyverse)
+library(writexl)
+library(sparklyr)
+library(readr)
+library(plyr)
+library(dplyr)
+library(ISLR2)
+library(leaps)
+library(MASS)
+library(class)
+library(randomForest)
+library(pls)
+library(e1071)
+library(naivebayes)
+#library(cowplot)
+#library(rstatix)
+#library(corrplot)
+```
+
+
+# IMPORT AND EXPLORE THE DATASET
+```{r}
+data <- read.csv("breast-cancer.csv")
+```
+
+The function class(.) returns the values of the class attribute of an R object.
+```{r}
+class(data)
+```
+
+The dim(.) function returns the dimensions of the data frame.
+```{r}
+dim(data)
+```
+
+The function names(.) is used to provide the names of the dataset's variables.
+```{r}
+names(data)
+```
+
+The head(.) function prints the first 6 rows of the data set.
+```{r}
+head(data)
+```
+
+The str(.) function will help us to have a first look at the structure of the data.We get information about the variable names,their types, and their first values respectively
+str(data)
+```{r}
+str(data)
+```
+
+For the plot_intro we need to install and load the package DataExplorer.
+The plot_intro() shows us some useful information about the dataset.
+```{r}
+plot_intro(data)
+plot_bar(data)
+```
+
+count the values in the diagnosis column
+```{r}
+count(data$diagnosis=='M')
+```
+
+#DATA PRE-PROCESSING
+
+WRONG OR IRRELEVANT VALUES
+
+Drop the id column
+The id column does not offer any information so it will be dropped
+```{r}
+data <-data[,-c(1)]
+```
+
+UNIQUE VALUES
+
+Print the unique values of each column of the data set
+```{r}
+unique(data)
+```
+
+Number of unique values of each column
+```{r}
+number_uniques = c()
+for (i in 1:31){
+  number_uniques[i] = length(unique(data[,i])) 
+}
+number_uniques = as.data.frame(number_uniques)
+number_uniques$col = colnames(data)
+number_uniques$index = 1:31
+number_uniques
+```
+
+Find the NaN values and print the sum of the NaN values in the columns:
+```{r}
+colSums(is.na(data))
+```
+There are no nan values but there are some values that are 0
+
+Find duplicates in the data frame:
+```{r}
+sum(duplicated(data))
+```
+
+The as.factor(.) change the type of a variable to factor
+```{r}
+data$diagnosis <- as.factor(data$diagnosis)
+```
+
+# EXPLORATORY DATA ANALYSIS AND VISUALIZATION
+
+Remove from the data the diagnosis column
+```{r}
+data_continuous <- subset(data, select = -diagnosis)
+```
+
+Statistics of the data set
+```{r}
+summary(data)
+```
+
+FEATURES' DISTRIBUTIONS
+
+Histograms
+```{r}
+par(mfrow = c(6,5))
+par(mar = c(1, 1, 1, 1))
+
+invisible(lapply(1:ncol(data_continuous),function(i) 
+          hist(data_continuous[,i],col = 'lightblue',main = colnames(data_continuous)[i]))) 
+# The “invisible()” function prevents the “lapply” function’s output text from being visible.
+```
+
+OUTLIERS
+
+Box plots
+```{r}
+par(mfrow = c(6,5))
+par(mar = c(1, 1, 1, 1))
+
+invisible(lapply(1:ncol(data_continuous),function(i) 
+          boxplot(data_continuous[,i],col = 'peachpuff',main = colnames(data_continuous)[i])))
+# The “invisible()” function prevents the “lapply” function’s output text from being visible.
+```
+
+Calculate the percentage of outliers in the dataset
+Check for outliers 
+```{r}
+find_outliers <- function(x){
+  H=1.5 * IQR(x)
+  number <- sum(x < (quantile(x)[2]-H)) + sum(x > (quantile(x)[4]+H))
+  number
+}
+
+outliers=c()
+for (i in 1:30){
+  outliers[i]=find_outliers(data_continuous[1:569,i])
+}
+
+# percentage of outliers for each of the above columns
+outliers_tois100=as.data.frame(round(((outliers/569)*100),2)) 
+# Add the name of each column
+outliers_tois100$col=colnames(data_continuous) 
+outliers_tois100
+```
+
+CORRELATION MATRICES AND PLOTS
+
+Correlation between the features:
+```{r}
+library(corrplot)
+corrplot(cor(data[-c(1,2)]))
+#plot_correlation()
+```
+
+
+```{r}
+#for the correlation matrix
+#install.packages("rstatix")
+library(rstatix)
+```
+
+
+```{r}
+#correlation matrix
+cor_mat(data_continuous) 
+```
+
+Remove correlated variables
+```{r}
+data_corr <- cor(data_continuous)
+# Checking Variables that are highly correlated
+highlyCorrelated = findCorrelation(data_corr, cutoff=0.6)
+highlyCorCol = colnames(data_continuous)[highlyCorrelated]
+# Remove highly correlated variables and create a new dataset
+data_filtered <- data_continuous[, -which(colnames(data_continuous) %in% highlyCorCol)]
+data_filtered %>% head(5)
+```
+
+Distributions of the least correlated features
+```{r}
+library(cowplot)
+a = ggplot(data,aes(texture_mean, fill = diagnosis, color = diagnosis)) + 
+    geom_density(lwd = 3, show.legend = T, alpha = 0.7) + 
+    labs(title = "Texture Mean", x = "Texture Mean")+
+    scale_fill_manual(values=c('lightblue','peachpuff' )) + 
+    scale_color_manual(values=c('steelblue','lightsalmon' ))  
+
+b = ggplot(data,aes(area_mean, fill = diagnosis, color = diagnosis)) + 
+    geom_density(lwd = 3, show.legend = T, alpha = 0.7) + 
+    labs(title = "Area Mean", x = "Area Mean")+
+    scale_fill_manual(values=c('lightblue','peachpuff' )) + 
+    scale_color_manual(values=c('steelblue','lightsalmon' ))  
+
+c = ggplot(data,aes(texture_se, fill = diagnosis, color = diagnosis)) + 
+    geom_density(lwd = 3, show.legend = T, alpha = 0.7) + 
+    labs(title = "Texture SE", x = "Texture SE") +
+    scale_fill_manual(values=c('lightblue','peachpuff' )) + 
+    scale_color_manual(values=c('steelblue','lightsalmon' ))  
+
+d = ggplot(data,aes(smoothness_se, fill = diagnosis, color = diagnosis)) + 
+    geom_density(lwd = 3, show.legend = T, alpha = 0.7) + 
+    labs(title = "Smoothness SE", x = "Smoothness SE") +
+    scale_fill_manual(values=c('lightblue','peachpuff' )) + 
+    scale_color_manual(values=c('steelblue','lightsalmon' ))    
+
+e = ggplot(data,aes(symmetry_se, fill = diagnosis, color = diagnosis)) + 
+    geom_density(lwd = 3, show.legend = T, alpha = 0.7) + 
+    labs(title = "Symmetry SE", x = "Symmetry SE") +
+    scale_fill_manual(values=c('lightblue','peachpuff' )) + 
+    scale_color_manual(values=c('steelblue','lightsalmon' ))  
+
+f = ggplot(data,aes(fractal_dimension_se, fill = diagnosis, color = diagnosis)) + 
+    geom_density(lwd = 3, show.legend = T, alpha = 0.7) + 
+    labs(title = "Fractal Dimension SE", x= "Fractal Dimension SE") +
+    scale_fill_manual(values=c('lightblue','peachpuff' )) + 
+    scale_color_manual(values=c('steelblue','lightsalmon' ))  
+
+g = ggplot(data,aes(smoothness_worst, fill = diagnosis, color = diagnosis)) + 
+    geom_density(lwd = 3, show.legend = T, alpha = 0.7) + 
+    labs(title = "Smoothness Worst", x = "Smoothness Worst") +
+    scale_fill_manual(values=c('lightblue','peachpuff' )) + 
+    scale_color_manual(values=c('steelblue','lightsalmon' ))  
+
+h = ggplot(data,aes(symmetry_worst, fill = diagnosis, color = diagnosis)) + 
+    geom_density(lwd = 3, show.legend = T, alpha = 0.7) + 
+    labs(title = "Symmetry Worst", x = "Symmetry Worst") +
+    scale_fill_manual(values=c('lightblue','peachpuff' )) + 
+    scale_color_manual(values=c('steelblue','lightsalmon' ))  
+
+options(repr.plot.width=16, repr.plot.height=8)
+plot_grid(a,b,c,d,e,f,g,h, ncol = 4, nrow = 2)
+```
+
+Distributions of correlated features
+We got four of the highest correlations, but at the same time we chose features that had not so clear definition on our mind.
+```{r}
+# negative correlated
+a=ggplot(data, aes(x = area_mean, y = smoothness_se, color = diagnosis)) +
+  geom_point(position = "jitter") +
+  theme_bw() +
+  labs(title = "Area mean vs. Smoothness SE, by Diagnosis") +
+  scale_color_manual(values=c('steelblue','lightsalmon' ))  
+
+# negative correlated
+b=ggplot(data, aes(x = radius_mean, y = fractal_dimension_mean, color = diagnosis)) +
+  geom_point(position = "jitter") +
+  theme_bw() +
+  labs(title = "Radius mean vs. Fractal dimension mean, by Diagnosis") +
+  scale_color_manual(values=c('steelblue','lightsalmon' ))  
+
+# positive correlated
+c=ggplot(data, aes(x = texture_mean, y = texture_worst, color = diagnosis)) +
+  geom_point(position = "jitter") +
+  theme_bw() +
+  labs(title = "Texture mean vs. Texture worst, by Diagnosis") +
+  scale_color_manual(values=c('steelblue','lightsalmon' ))  
+
+# positive correlated
+d=ggplot(data, aes(x = concavity_worst, y = concave.points_worst, color = diagnosis)) +
+  geom_point(position = "jitter") +
+  theme_bw() +
+  labs(title = "Concavity worst vs. Concave points worst, by Diagnosis") +
+  scale_color_manual(values=c('steelblue','lightsalmon' ))  
+
+plot_grid(a,b,c,d, ncol = 2, nrow = 2)
+```
+
+Pair plots
+```{r}
+pairs(~ diagnosis +radius_mean+texture_mean+perimeter_mean+area_mean+smoothness_mean+compactness_mean+
+  concavity_mean+concave.points_mean+symmetry_mean+fractal_dimension_mean, data = data)
+
+pairs(~ diagnosis +radius_se+texture_se+perimeter_se+area_se+smoothness_se+compactness_se+
+  concavity_se+concave.points_se+symmetry_se+fractal_dimension_se, data = data)
+
+pairs(~ diagnosis +radius_worst+texture_worst+perimeter_worst+area_worst+smoothness_worst+compactness_worst+
+  concavity_worst+concave.points_worst+symmetry_worst+fractal_dimension_worst, data = data)
+```
+
+# FEATURE SELECTION
+```{r}
+x <- data[,-c(1)]
+
+# Target variable
+y <- data$diagnosis
+
+# Training: 80%; Test: 20%
+set.seed(2021)
+inTrain <- createDataPartition(y, p = .80, list = FALSE)[,1]
+
+x_train <- x[ inTrain, ]
+x_test  <- x[-inTrain, ]
+
+y_train <- y[ inTrain]
+y_test  <- y[-inTrain]
+```
+
+RFE
+```{r}
+# Define the control using a random forest selection function
+control <- rfeControl(functions = rfFuncs, # specifies that the random forest algorithm will be used as the selection function
+                      method = "cv", #  feature selection will be performed using cross-validation
+                      number = 10) # number of folds
+
+# Run RFE
+result_rfe1 <- rfe(x = x_train, 
+                   y = y_train, 
+                   sizes = c(1:31), #the range is from 1 to 31
+                   rfeControl = control)
+
+# Print the results
+result_rfe1
+
+# Print the selected features
+predictors(result_rfe1)
+
+# # visualize the results of the RFE algorithm in terms of accuracy and kappa metrics
+ggplot(data = result_rfe1, metric = "Accuracy") + theme_bw() 
+ggplot(data = result_rfe1, metric = "Kappa") + theme_bw()
+```
+
+VARIANCE IMPORTANCE
+```{r}
+#variance importance
+varimp_data <- data.frame(feature = row.names(varImp(result_rfe1))[1:31],
+                          importance = varImp(result_rfe1)[1:31, 1])
+
+ggplot(data = varimp_data, 
+       aes(x = reorder(feature, -importance), y = importance, fill = feature)) +
+  geom_bar(stat="identity") + labs(x = "Features", y = "Variable Importance") + 
+  geom_text(aes(label = round(importance, 2)), vjust=1.6, color="white", size=4) + 
+  theme_bw() + theme(legend.position = "none")+
+   theme(axis.text.x = element_text(angle = 60, hjust = 1)) 
+   
+```
+
+
+```{r}
+varimp_data
+```
+
+POST PREDICTION
+```{r}
+# Post prediction
+postResample(predict(result_rfe1, x_test), y_test)
+```
+
+PRINCIPAL COMPONENT ANALYSIS
+```{r}
+# Reference:
+# https://www.geeksforgeeks.org/principal-component-analysis-with-r-programming/
+# https://towardsdatascience.com/learn-principle-component-analysis-in-r-ddba7c9b1064
+  
+# Separate target variable 'diagnosis' from the features data
+target_pca <- data %>% select(diagnosis)
+data_pca <- data %>% select(-diagnosis)
+
+# Perform PCA using the prcomp function
+pca <- prcomp(data_pca, center = TRUE, scale. = TRUE)
+
+pca$rotation
+
+# Importance of components
+summary(pca)
+
+# Compute standard deviation
+pca$sdev
+ 
+# Compute variance
+pca.var <- pca$sdev ^ 2
+pca.var
+
+# Proportion of variance 
+propve <- pca.var / sum(pca.var)
+
+# Plot variance explained for each principal component
+plot(propve, xlab = "principal component",
+            ylab = "Proportion of Variance Explained",
+            ylim = c(0, 1), type = "b",main ="Scree plot for PCA")
+ 
+# Plot the cumulative proportion of variance explained
+plot(cumsum(propve),
+    xlab = "Principal Component",
+    ylab = "Cumulative Proportion of Variance Explained",
+    ylim = c(0, 1), type = "b")
+ 
+# Find Top n principal component which will atleast cover 90 % variance of dimension
+components <- which(cumsum(propve) >= 0.9)[1]
+cat("The number of components is:", components)
+
+#Select the first seven principal components for the model that will use PCA for the predictive analysis
+data_7_components <- cbind(diagnosis = data[, "diagnosis"], pca$x[, 1:7]) %>% as.data.frame()
+
+```
+
+#Train the models with test and train sets
+
+```{r}
+#for the logistic regression, lda,qda
+set.seed(1)
+data$diagnosis <- as.factor(data$diagnosis)
+sample <- sample(c(TRUE, FALSE), nrow(data), replace=TRUE, prob=c(0.8,0.2))
+train <- data[sample,]
+test <- data[!sample,]
+```
+
+
+LOGISTIC REGRESSION
+
+```{r}
+#using train and test
+
+glm.fits <- glm(diagnosis ~ .,data = train, family = binomial)
+summary(glm.fits)
+```
+
+```{r}
+glm.probs <- predict(glm.fits,test,type = "response")
+```
+
+```{r}
+glm.pred <- rep("B", 110)
+glm.pred[glm.probs > .5] = "M"
+```
+
+```{r}
+Diagnosis.test<- c(data[!sample, "diagnosis"])
+```
+
+```{r}
+# Convert glm.pred to a factor with levels "B" and "M"
+glm.pred <- factor(glm.pred, levels = c("B", "M"))
+
+# Convert actual.class to a factor with levels "B" and "M"
+actual.class <- test$diagnosis
+actual.class <- factor(actual.class, levels = c("B", "M"))
+```
+
+```{r}
+# Create a confusion matrix and calculate accuracy, recall, precision, and F1 score
+cm <- confusionMatrix(glm.pred, actual.class)
+
+accuracy <- cm$overall["Accuracy"]
+recall <- cm$byClass["Sensitivity"]
+precision <- cm$byClass["Precision"]
+f1_score <- cm$byClass["F1"]
+```
+
+```{r}
+# Print the results
+cat("Accuracy:", round(accuracy, 4), "\n")
+cat("Precision:", round(precision, 4), "\n")
+cat("Recall:", round(recall, 4), "\n")
+cat("F1 score:", round(f1_score, 4), "\n")
+```
+
+
+Stetpwise Logistic Regression variable selection
+
+```{r}
+step.model <- glm.fits %>% stepAIC(trace = FALSE)
+#coef(step.model)
+```
+
+```{r}
+glm.probs <- predict(step.model,test,type = "response")
+glm.pred <- rep("B", 110)
+glm.pred[glm.probs > .5] = "M"
+table(glm.pred,Diagnosis.test)
+```
+
+```{r}
+# Convert glm.pred to a factor with levels "B" and "M"
+glm.pred <- factor(glm.pred, levels = c("B", "M"))
+
+# Convert actual.class to a factor with levels "B" and "M"
+actual.class <- test$diagnosis
+actual.class <- factor(actual.class, levels = c("B", "M"))
+```
+
+```{r}
+# Create a confusion matrix and calculate accuracy, recall, precision, and F1 score
+cm <- confusionMatrix(glm.pred, actual.class)
+
+accuracy <- cm$overall["Accuracy"]
+recall <- cm$byClass["Sensitivity"]
+precision <- cm$byClass["Precision"]
+f1_score <- cm$byClass["F1"]
+```
+
+```{r}
+# Print the results
+cat("Accuracy:", round(accuracy, 4), "\n")
+cat("Precision:", round(precision, 4), "\n")
+cat("Recall:", round(recall, 4), "\n")
+cat("F1 score:", round(f1_score, 4), "\n")
+```
+
+
+LINEAR DISCRIMINANT ANALYSIS
+
+```{r}
+lda.fit <- lda(diagnosis ~ ., data = train)
+lda.fit
+```
+
+```{r}
+plot(lda.fit,col=("steelblue"))
+```
+
+```{r}
+lda.pred <- predict(lda.fit, test)
+names(lda.pred)
+```
+
+```{r}
+# Extract the predicted class labels and actual class labels as well the confusion matrix
+Diagnosis <-  c(data[!sample, "diagnosis"] )
+lda.class <- lda.pred$class
+actual.class <- test$diagnosis
+table(lda.class, Diagnosis)
+```
+
+```{r}
+# Create a confusion matrix and calculate accuracy, recall, precision, and F1 score
+cm <- confusionMatrix(lda.class, actual.class)
+
+accuracy <- cm$overall["Accuracy"]
+recall <- cm$byClass["Sensitivity"]
+precision <- cm$byClass["Precision"]
+f1_score <- cm$byClass["F1"]
+```
+
+```{r}
+# Print the results
+cat("Accuracy:", round(accuracy, 4), "\n")
+cat("Precision:", round(precision, 4), "\n")
+cat("Recall:", round(recall, 4), "\n")
+cat("F1 score:", round(f1_score, 4), "\n")
+```
+
+
+Quadratic Discriminant Analysis
+
+```{r}
+qda.fit <- qda(diagnosis ~., data = train)
+qda.fit
+```
+
+```{r}
+qda.pred <- predict(qda.fit, test)
+
+```
+
+```{r}
+# Extract the predicted class labels and actual class labels as well the confusion matrix
+qda.class <- qda.pred$class
+actual.class <- test$diagnosis
+table(qda.class, Diagnosis)
+```
+
+```{r}
+# Create a confusion matrix and calculate accuracy, recall, precision, and F1 score
+cm <- confusionMatrix(qda.class, actual.class)
+
+accuracy <- cm$overall["Accuracy"]
+recall <- cm$byClass["Sensitivity"]
+precision <- cm$byClass["Precision"]
+f1_score <- cm$byClass["F1"]
+```
+
+```{r}
+# Print the results
+cat("Accuracy:", round(accuracy, 4), "\n")
+cat("Precision:", round(precision, 4), "\n")
+cat("Recall:", round(recall, 4), "\n")
+cat("F1 score:", round(f1_score, 4), "\n")
+```
+
+
+NAIVE BAYES
+
+```{r}
+nb.fit <- naiveBayes(diagnosis~., data = train)
+nb.fit
+```
+
+```{r}
+nb.class <- predict(nb.fit, test)
+```
+
+```{r}
+# Extract the predicted class labels and actual class labels as well the confusion matrix
+actual.class <- test$diagnosis
+table(nb.class, Diagnosis)
+```
+
+```{r}
+# Create a confusion matrix and calculate accuracy, recall, precision, and F1 score
+cm <- confusionMatrix(nb.class, actual.class)
+
+accuracy <- cm$overall["Accuracy"]
+recall <- cm$byClass["Sensitivity"]
+precision <- cm$byClass["Precision"]
+f1_score <- cm$byClass["F1"]
+```
+
+```{r}
+# Print the results
+cat("Accuracy:", round(accuracy, 4), "\n")
+cat("Precision:", round(precision, 4), "\n")
+cat("Recall:", round(recall, 4), "\n")
+cat("F1 score:", round(f1_score, 4), "\n")
+```
+
+
+KNN
+```{r}
+#test and training set.
+set.seed(1)
+sample <- sample(c(TRUE, FALSE), nrow(data), replace=TRUE, prob=c(0.8,0.2))
+train.X <- data[sample, 2:31]
+test.X <- data[!sample, 2:31 ]
+train.Y <- data[sample, "diagnosis"]
+test.Y <- data[!sample, "diagnosis"] 
+```
+
+```{r}
+#Fit the model for k=3
+knn.pred <- knn(train.X, test.X, train.Y, k=3) 
+```
+
+```{r}
+mean(test.Y!= knn.pred)
+```
+
+```{r}
+mean(test.Y!= "Malignant")
+```
+
+```{r}
+confusion_matrix <- table(knn.pred, test.Y)
+confusion_matrix
+```
+
+```{r}
+# Create a confusion matrix and calculate performance metrics
+cm <- confusionMatrix(table(knn.pred, test.Y))
+
+# Extract performance metrics
+accuracy <- cm$overall["Accuracy"]
+recall <- cm$byClass["Sensitivity"]
+precision <- cm$byClass["Precision"]
+f1_score <- cm$byClass["F1"]
+```
+
+```{r}
+# Print the results
+cat("Accuracy:", round(accuracy, 4), "\n")
+cat("Precision:", round(precision, 4), "\n")
+cat("Recall:", round(recall, 4), "\n")
+cat("F1 score:", round(f1_score, 4), "\n")
+```
+
+
+RANDOM FOREST
+
+```{r}
+ rf <- randomForest(formula = diagnosis~ ., data = train) 
+```
+
+```{r}
+pred <- predict(rf, newdata = test, type = "class")
+table(pred, test$diagnosis)
+
+```
+
+```{r}
+# Create a confusion matrix and calculate performance metrics
+cm <- confusionMatrix(table(pred, test$diagnosis))
+
+# Extract performance metrics
+accuracy <- cm$overall["Accuracy"]
+recall <- cm$byClass["Sensitivity"]
+precision <- cm$byClass["Precision"]
+f1_score <- cm$byClass["F1"]
+```
+
+```{r}
+# Print the results
+cat("Accuracy:", round(accuracy, 4), "\n")
+cat("Precision:", round(precision, 4), "\n")
+cat("Recall:", round(recall, 4), "\n")
+cat("F1 score:", round(f1_score, 4), "\n")
+```
+
+
+#Train the models with 10-fold cross validation
+
+```{r}
+# Reference:
+#https://github.com/mariocastro73/ML2020-2021/blob/master/scripts/crossvalidation.R?fbclid=IwAR1L9NDBq99NSRYD3rG7He0rBtrbPllEVxs1QQEcoM57rK7dhM4Ky8i8cmQ
+```
+
+#Without Scaling
+```{r}
+#test and training test
+set.seed(1)
+df_sampling <- createDataPartition(data$diagnosis, times = 1, p = 0.8, list = FALSE)
+df_training <- data[df_sampling, ]
+df_testing <-  data[-df_sampling, ]
+df_control <- trainControl(method="cv",
+                           number = 5,
+                           classProbs = TRUE,
+                           summaryFunction = twoClassSummary)
+```
+
+Logistic Regression
+```{r}
+model_logreg_df <- train(diagnosis ~., data = df_training, method = "glm", 
+                         metric = "ROC", 
+                         trControl = df_control)
+
+prediction_logreg_df <- predict(model_logreg_df, df_testing)
+cm_logreg_df <- confusionMatrix(prediction_logreg_df, df_testing$diagnosis, mode = "everything", positive = "M")
+cm_logreg_df
+```
+
+
+Random Forest
+```{r}
+model_rf_df <- train(diagnosis ~., data = df_training,
+                     method = "rf", 
+                     metric = 'ROC', 
+                     trControl = df_control)
+
+prediction_rf_df <- predict(model_rf_df, df_testing)
+cm_rf_df <- confusionMatrix(prediction_rf_df, df_testing$diagnosis,mode = "everything", positive = "M")
+cm_rf_df
+```
+
+
+KNN
+```{r}
+model_knn_df <- train(diagnosis ~., data = df_training, 
+                      method = "knn", 
+                      metric = "ROC", 
+                      trControl = df_control, 
+                      tuneLength =31)
+
+prediction_knn_df <- predict(model_knn_df, df_testing)
+cm_knn_df <- confusionMatrix(prediction_knn_df, df_testing$diagnosis,mode = "everything", positive = "M")
+cm_knn_df
+```
+
+
+
+LDA
+```{r}
+model_lda_df = train(diagnosis ~ ., data=df_training, 
+                     method="lda",
+                     metric = "ROC", 
+                     trControl = df_control)
+
+prediction_lda_df <- predict(model_lda_df, df_testing)
+cm_lda_df <- confusionMatrix(prediction_lda_df, df_testing$diagnosis,mode = "everything", positive = "M")
+cm_lda_df
+```
+
+
+QDA
+```{r}
+model_qda_df = train(diagnosis ~ ., data=df_training, 
+                     method="qda",
+                     metric = "ROC", 
+                     trControl = df_control)
+
+prediction_qda_df <- predict(model_qda_df, df_testing)
+cm_qda_df <- confusionMatrix(prediction_qda_df, df_testing$diagnosis, mode = "everything", positive = "M")
+cm_qda_df
+```
+
+
+Stepwise Logistic Regression
+```{r}
+# Stepwise logistic regression model
+model_logistic_df <- train(diagnosis ~ ., data = df_training,
+                           method = "glmStepAIC",
+                           metric = "ROC",
+                           trControl = df_control)
+
+prediction_logistic_df <- predict(model_logistic_df, newdata = df_testing)
+cm_logistic_df <- confusionMatrix(prediction_logistic_df, df_testing$diagnosis,mode = "everything", positive = "M")
+cm_logistic_df
+```
+
+
+Naive Bayes
+```{r}
+# Naive Bayes model
+model_naive_df <- train(diagnosis ~ ., data = df_training, 
+                        method = "naive_bayes",
+                        metric= "ROC",
+                        trControl = df_control)
+prediction_naive_df <- predict(model_naive_df, newdata = df_testing)
+cm_naive_df <- confusionMatrix(prediction_naive_df, df_testing$diagnosis,mode = "everything", positive = "M")
+print(cm_naive_df)
+```
+#With Scaling
+
+In general,scaling is recommended for distance-based algorithms such as k-Nearest Neighbors (k-NN), since these algorithms are sensitive to the scale of the input features. Scaling may not be necessary for decision tree-based algorithms such as Random Forest. Scaling is generally not recommended for algorithms that are already designed to work with non-scaled data, such as Naive Bayes. For logistic regression, LDA, QDA, and stepwise logistic regression, scaling may or may not be necessary depending on the specific data set and the range of values for the features.Here we have some predictors (radius_mean, texture_mean, perimeter_mean, area_mean, perimeter_se, area_se, radius_worst, texture_worst, perimeter_worst, area_worst ) that have larger scale than others. Consequently, we are going to use scaling in knn, logistic regression, LDA, QDA, and stepwise logistic regression
+
+Logistic Regression
+```{r}
+model_logreg_df <- train(diagnosis ~., data = df_training, method = "glm", 
+                         metric = "ROC",
+                         preProcess =c("scale","center"),
+                         trControl = df_control)
+
+prediction_logreg_df <- predict(model_logreg_df, df_testing)
+cm_logreg_df <- confusionMatrix(prediction_logreg_df, df_testing$diagnosis, mode = "everything", positive = "M")
+cm_logreg_df
+```
+
+
+KNN
+```{r}
+model_knn_df <- train(diagnosis ~., data = df_training, 
+                      method = "knn", 
+                      metric = "ROC",
+                      preProcess =c("scale","center"),
+                      trControl = df_control, 
+                      tuneLength =31)
+
+prediction_knn_df <- predict(model_knn_df, df_testing)
+cm_knn_df <- confusionMatrix(prediction_knn_df, df_testing$diagnosis,mode = "everything", positive = "M")
+cm_knn_df
+```
+
+LDA
+```{r}
+model_lda_df = train(diagnosis ~ ., data=df_training, 
+                     method="lda",
+                     metric = "ROC",
+                     preProcess =c("scale","center"),
+                     trControl = df_control)
+
+prediction_lda_df <- predict(model_lda_df, df_testing)
+cm_lda_df <- confusionMatrix(prediction_lda_df, df_testing$diagnosis,mode = "everything", positive = "M")
+cm_lda_df
+```
+
+QDA
+```{r}
+model_qda_df = train(diagnosis ~ ., data=df_training, 
+                     method="qda",
+                     metric = "ROC",
+                     preProcess =c("scale","center"),
+                     trControl = df_control)
+
+prediction_qda_df <- predict(model_qda_df, df_testing)
+cm_qda_df <- confusionMatrix(prediction_qda_df, df_testing$diagnosis, mode = "everything", positive = "M")
+cm_qda_df
+```
+
+Stepwise Logistic Regression
+```{r}
+# Stepwise logistic regression model
+model_logistic_df <- train(diagnosis ~ ., data = df_training,
+                           method = "glmStepAIC",
+                           metric = "ROC",
+                           preProcess =c("scale","center"),
+                           trControl = df_control)
+
+prediction_logistic_df <- predict(model_logistic_df, newdata = df_testing)
+cm_logistic_df <- confusionMatrix(prediction_logistic_df, df_testing$diagnosis,mode = "everything", positive = "M")
+cm_logistic_df
+```
+
+#Train the models with feature selection and cross-validation
+
+Features selected from above: 
+'area_worst''perimeter_worst''radius_worst''concave.points_worst''concave.points_mean'
+'texture_worst''area_se''smoothness_worst''concavity_worst''texture_mean''area_mean''concavity_mean'
+'perimeter_mean''radius_mean''radius_se''perimeter_se''symmetry_worst''compactness_worst''smoothness_mean'
+'compactness_mean''concavity_se''fractal_dimension_worst''compactness_se''concave.points_se'
+```{r}
+#features selected from above: 
+#'area_worst''perimeter_worst''radius_worst''concave.points_worst''concave.points_mean'
+#'texture_worst''area_se''smoothness_worst''concavity_worst''texture_mean''area_mean''concavity_mean'
+#'perimeter_mean''radius_mean''radius_se''perimeter_se''symmetry_worst''compactness_worst''smoothness_mean'
+#'compactness_mean''concavity_se''fractal_dimension_worst''compactness_se''concave.points_se'
+
+data_select <-data[,c('diagnosis','area_worst','perimeter_worst','radius_worst','concave.points_worst','concave.points_mean',
+'texture_worst','area_se','smoothness_worst','concavity_worst','texture_mean','area_mean','concavity_mean',
+'perimeter_mean','radius_mean','radius_se','perimeter_se','symmetry_worst','compactness_worst','smoothness_mean',
+'compactness_mean','concavity_se','fractal_dimension_worst','compactness_se','concave.points_se')]
+```
+
+```{r}
+#test and training test
+set.seed(1)
+df_sampling <- createDataPartition(data_select$diagnosis, times = 1, p = 0.8, list = FALSE)
+df_training <- data_select[df_sampling, ]
+df_testing <-  data_select[-df_sampling, ]
+df_control <- trainControl(method="cv",
+                           number = 10,
+                           classProbs = TRUE,
+                           summaryFunction = twoClassSummary)
+
+
+```
+
+
+Logistic Regression
+```{r}
+model_logreg_df <- train(diagnosis ~., data = df_training, method = "glm", 
+                         metric = "ROC", 
+                         trControl = df_control)
+
+prediction_logreg_df <- predict(model_logreg_df, df_testing)
+cm_logreg_df <- confusionMatrix(prediction_logreg_df, df_testing$diagnosis, mode = "everything", positive = "M")
+cm_logreg_df
+```
+
+
+Random Forest
+```{r}
+model_rf_df <- train(diagnosis ~., data = df_training,
+                     method = "rf", 
+                     metric = 'ROC', 
+                     trControl = df_control)
+
+prediction_rf_df <- predict(model_rf_df, df_testing)
+cm_rf_df <- confusionMatrix(prediction_rf_df, df_testing$diagnosis,mode = "everything", positive = "M")
+cm_rf_df
+```
+
+KNN
+```{r}
+model_knn_df <- train(diagnosis ~., data = df_training, 
+                      method = "knn", 
+                      metric = "ROC", 
+                      trControl = df_control, 
+                      tuneLength =31)
+
+prediction_knn_df <- predict(model_knn_df, df_testing)
+cm_knn_df <- confusionMatrix(prediction_knn_df, df_testing$diagnosis,mode = "everything", positive = "M")
+cm_knn_df
+```
+
+LDA
+```{r}
+model_lda_df = train(diagnosis ~ ., data=df_training, 
+                     method="lda",
+                     metric = "ROC", 
+                     trControl = df_control)
+
+prediction_lda_df <- predict(model_lda_df, df_testing)
+cm_lda_df <- confusionMatrix(prediction_lda_df, df_testing$diagnosis,mode = "everything", positive = "M")
+cm_lda_df
+```
+
+
+QDA
+```{r}
+model_qda_df = train(diagnosis ~ ., data=df_training, 
+                     method="qda",
+                     metric = "ROC", 
+                     trControl = df_control)
+
+prediction_qda_df <- predict(model_qda_df, df_testing)
+cm_qda_df <- confusionMatrix(prediction_qda_df, df_testing$diagnosis, mode = "everything", positive = "M")
+cm_qda_df
+```
+
+
+Stepwise Logistic Regression
+```{r}
+# Stepwise logistic regression model
+model_logistic_df <- train(diagnosis ~ ., data = df_training,
+                           method = "glmStepAIC",
+                           metric = "ROC",
+                           trControl = df_control)
+
+prediction_logistic_df <- predict(model_logistic_df, newdata = df_testing)
+cm_logistic_df <- confusionMatrix(prediction_logistic_df, df_testing$diagnosis,mode = "everything", positive = "M")
+cm_logistic_df
+```
+
+
+Naive Bayes
+```{r}
+# Naive Bayes model
+model_naive_df <- train(diagnosis ~ ., data = df_training, 
+                        method = "naive_bayes",
+                        metric= "ROC",
+                        trControl = df_control)
+prediction_naive_df <- predict(model_naive_df, newdata = df_testing)
+cm_naive_df <- confusionMatrix(prediction_naive_df, df_testing$diagnosis,mode = "everything", positive = "M")
+print(cm_naive_df)
+```
+
+
+# Train the models with PCA and cross validation
+
+```{r}
+#test and training test
+set.seed(1)
+df_sampling <- createDataPartition(data_7_components$diagnosis, times = 1, p = 0.8, list = FALSE)
+df_training <- data_select[df_sampling, ]
+df_testing <-  data_select[-df_sampling, ]
+df_control <- trainControl(method="cv",
+                           number = 10,
+                           classProbs = TRUE,
+                           summaryFunction = twoClassSummary)
+
+```
+
+
+Logistic Regression
+```{r}
+model_logreg_df <- train(diagnosis ~., data = df_training, method = "glm", 
+                         metric = "ROC", 
+                         trControl = df_control)
+
+prediction_logreg_df <- predict(model_logreg_df, df_testing)
+cm_logreg_df <- confusionMatrix(prediction_logreg_df, df_testing$diagnosis, mode = "everything", positive = "M")
+cm_logreg_df
+```
+
+
+Random Forest
+```{r}
+model_rf_df <- train(diagnosis ~., data = df_training,
+                     method = "rf", 
+                     metric = 'ROC', 
+                     trControl = df_control)
+
+prediction_rf_df <- predict(model_rf_df, df_testing)
+cm_rf_df <- confusionMatrix(prediction_rf_df, df_testing$diagnosis,mode = "everything", positive = "M")
+cm_rf_df
+```
+
+
+KNN
+```{r}
+model_knn_df <- train(diagnosis ~., data = df_training, 
+                      method = "knn", 
+                      metric = "ROC", 
+                      trControl = df_control, 
+                      tuneLength =31)
+
+prediction_knn_df <- predict(model_knn_df, df_testing)
+cm_knn_df <- confusionMatrix(prediction_knn_df, df_testing$diagnosis,mode = "everything", positive = "M")
+cm_knn_df
+```
+
+
+LDA
+```{r}
+model_lda_df = train(diagnosis ~ ., data=df_training, 
+                     method="lda",
+                     metric = "ROC", 
+                     trControl = df_control)
+
+prediction_lda_df <- predict(model_lda_df, df_testing)
+cm_lda_df <- confusionMatrix(prediction_lda_df, df_testing$diagnosis,mode = "everything", positive = "M")
+cm_lda_df
+```
+
+
+QDA
+```{r}
+model_qda_df = train(diagnosis ~ ., data=df_training, 
+                     method="qda",
+                     metric = "ROC", 
+                     trControl = df_control)
+
+prediction_qda_df <- predict(model_qda_df, df_testing)
+cm_qda_df <- confusionMatrix(prediction_qda_df, df_testing$diagnosis, mode = "everything", positive = "M")
+cm_qda_df
+```
+
+
+Stepwise Logistic Regression
+```{r}
+# Stepwise logistic regression model
+model_logistic_df <- train(diagnosis ~ ., data = df_training,
+                           method = "glmStepAIC",
+                           metric = "ROC",
+                           trControl = df_control)
+
+prediction_logistic_df <- predict(model_logistic_df, newdata = df_testing)
+cm_logistic_df <- confusionMatrix(prediction_logistic_df, df_testing$diagnosis,mode = "everything", positive = "M")
+cm_logistic_df
+```
+
+
+Naive Bayes
+```{r}
+# Naive Bayes model
+model_naive_df <- train(diagnosis ~ ., data = df_training, 
+                        method = "naive_bayes",
+                        metric= "ROC",
+                        trControl = df_control)
+prediction_naive_df <- predict(model_naive_df, newdata = df_testing)
+cm_naive_df <- confusionMatrix(prediction_naive_df, df_testing$diagnosis,mode = "everything", positive = "M")
+print(cm_naive_df)
+```
