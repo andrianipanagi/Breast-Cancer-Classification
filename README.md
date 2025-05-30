@@ -10,7 +10,7 @@ This project focuses on analyzing the Breast Cancer Wisconsin (Diagnostic) datas
 - Evaluate model performance using appropriate classification metrics.
 
 ## Dataset
-The dataset used is the **Breast Cancer Wisconsin (Diagnostic) Dataset**, sourced from [Kaggle].(https://www.kaggle.com/code/hsniyesakmak/breast-cancer-wisconsin-diagnostic/data?select=data.csv) 
+The dataset used is the **Breast Cancer Wisconsin (Diagnostic) Dataset**, sourced from [Kaggle](https://www.kaggle.com/code/hsniyesakmak/breast-cancer-wisconsin-diagnostic/data?select=data.csv).
 
 ## Methodology
 
